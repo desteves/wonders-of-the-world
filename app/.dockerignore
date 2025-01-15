@@ -1,0 +1,6 @@
+# Ignore unnecessary files/folders during build
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.env
