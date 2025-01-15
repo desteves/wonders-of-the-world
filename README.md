@@ -1,4 +1,4 @@
-# Wonders of the World: Vector Search Demo App
+# Wonders of the World: A Vector Search Demo App
 
 This application demonstrates a vector search functionality using MongoDB Atlas and Sentence Transformers. It allows users to search for fun facts about the Wonders of the World based on semantic similarity to a given prompt.
 
