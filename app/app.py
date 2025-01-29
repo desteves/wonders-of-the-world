@@ -1,9 +1,11 @@
 """
-app.py: Flask application that provides a /vectorsearch endpoint and optionally sets up the database.
+app.py: Flask application that provides a /vectorsearch endpoint
+        to perform vector searches on a MongoDB collection.
 """
 
 from flask import Flask, request, jsonify
-from db import collection, get_embedding, setup_vector_search  # Import necessary utilities
+from pymongo.errors import PyMongoError, OperationFailure, NetworkTimeout
+from db import collection, get_embedding #, setup_vector_search  # Import necessary utilities
 
 app = Flask(__name__)
 
@@ -61,8 +63,11 @@ def vector_search():
         results = collection.aggregate(pipeline)
         for doc in results:
             data.append(doc)
-    except Exception as e:
-        return jsonify({"error": f"An error occurred with the search"}), 500
+    except (PyMongoError, OperationFailure, NetworkTimeout) as e:  # Catch specific MongoDB errors
+        return jsonify({"error": f"Database error: {str(e)}"}), 500
+    except ValueError as e:  # Catch data-related errors
+        return jsonify({"error": f"Data error: {str(e)}"}), 400
+
 
     return jsonify({
         "query": prompt,

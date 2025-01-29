@@ -4,6 +4,7 @@ db.py: Handles MongoDB connection, embedding generation, and setup for vector se
 
 import os
 import json
+from datetime import datetime
 from pymongo import MongoClient
 from pymongo.operations import SearchIndexModel
 from sentence_transformers import SentenceTransformer
@@ -37,16 +38,8 @@ def get_embedding(data):
     embedding = model.encode(data)
     return embedding.tolist()
 
-def setup_vector_search():
-    """
-    Configures MongoDB Atlas for vector search by creating a search index and ingesting sample data.
 
-    1. Creates a vector search index on the specified collection.
-    2. Loads sample data with vector embeddings into the collection.
-
-    Returns:
-        int: Number of documents successfully inserted into the collection.
-    """
+def _create_vector_search_index():
     # Create vector search index definition
     search_index_model = SearchIndexModel(
         definition={
@@ -71,6 +64,8 @@ def setup_vector_search():
     except Exception as e:
         print(f"Error creating search index: {str(e)}")
 
+def _load_sample_data():
+
     # Read data from data.json
     try:
         with open("data.json", encoding="utf-8") as file:
@@ -82,6 +77,10 @@ def setup_vector_search():
     bulk_size = 20
     buffer = []
     inserted_doc_count = 0
+    model_info = {
+        "name": model.model_name_or_path,
+        "created_timestamp": datetime.now().isoformat(),
+    }
     for entry in data_entries:
         if 'text' in entry:
             text = entry['text']
@@ -89,7 +88,12 @@ def setup_vector_search():
             embedding = get_embedding(text)  # Generate embedding for each text
 
             # Prepare the document
-            document = {"_id": _id, "text": text, "embedding": embedding}
+            document = {
+                "_id": _id,
+                "text": text,
+                "embedding": embedding,
+                "model_info": model_info
+            }
             buffer.append(document)
 
             # If buffer reaches the bulk_size, perform batch insert
@@ -109,3 +113,17 @@ def setup_vector_search():
             print(f"Error inserting remaining documents: {str(e)}")
     print(f"Inserted {inserted_doc_count} documents.")
     return inserted_doc_count
+
+
+def setup_vector_search():
+    """
+    Configures MongoDB Atlas for vector search by creating a search index and ingesting sample data.
+
+    1. Creates a vector search index on the specified collection.
+    2. Loads sample data with vector embeddings into the collection.
+
+    Returns:
+        int: Number of documents successfully inserted into the collection.
+    """
+    # _create_vector_search_index()
+    return _load_sample_data()

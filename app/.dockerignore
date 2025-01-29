@@ -1,6 +1,22 @@
-# Ignore unnecessary files/folders during build
+# Exclude virtual environments
 venv/
+
+# Exclude Python cache files
 __pycache__/
 *.pyc
 *.pyo
+
+# Exclude environment variables
 .env
+
+# Exclude Git files
+.git/
+.gitignore
+
+# Exclude IDE specific files
+.vscode/
+.idea/
+
+# Exclude Dockerfile and docker-compose files
+Dockerfile
+docker-compose.yml

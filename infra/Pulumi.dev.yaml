@@ -1,5 +1,0 @@
-config:
-  mongodbatlas:publicKey:
-    secure: AAABACpm7Pdur7xtqBFHOaupZY+JKORm01iQsr4+p1QVGXIa5tOVtg==
-  mongodbatlas:privateKey:
-    secure: AAABANfuWAvnCqrKNmBIOBViYjIUCR653bOVdVrvuuwq9r3NIb3W65VHi1ufLSKtqoNgfu0vu8yeECNjcthLWkIPvk0=

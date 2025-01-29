@@ -1,5 +1,5 @@
 # Step 1: Use an official Python runtime as the base image
-FROM python:3.12-slim
+FROM python:3.12-slim AS base
 
 # Step 2: Set environment variables to prevent Python from writing .pyc files
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -9,7 +9,6 @@ ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 
 # Step 4: Copy requirements.txt into the container
-# First copy just the requirements to leverage Docker caching for dependencies
 COPY requirements.txt .
 
 # Step 5: Install dependencies

@@ -1,11 +1,9 @@
-name: infra
-description: A minimal Python Pulumi program
+name: wonders-of-the-world-infra
+description: |
+  This Pulumi program sets up the necessary cloud infrastructure for the Wonders of the World Vector Search Demo App.
+  It includes the deployment of MongoDB Atlas resources, network configurations, and other peripherals required for the application.
 runtime:
   name: python
   options:
     toolchain: pip
     virtualenv: venv
-config:
-  pulumi:tags:
-    value:
-      pulumi:template: python
