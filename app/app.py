@@ -35,7 +35,7 @@ def vector_search():
     pipeline = [
         {
             "$vectorSearch": {
-                "index": "vector_index",  # Update this to match your vector search index name
+                "index": "vector-index",  # Update this to match your vector search index name
                 "queryVector": query_embedding,
                 "path": "embedding",  # The field in the collection where embeddings are stored
                 "exact": True,

@@ -18,12 +18,14 @@ MONGO_URI = os.getenv("MONGO_URI")  # Fetch the MongoDB URI from the .env file
 if not MONGO_URI:
     raise ValueError("Missing MONGO_URI in the .env file")
 
+
+MODEL="nomic-ai/nomic-embed-text-v1"
 client = MongoClient(MONGO_URI)
 db = client["ww"]  # Update this with your database name
-collection = db["test"]  # Update this with your collection name
+collection = db["facts"]  # Update this with your collection name
 
 # Load the embedding model
-model = SentenceTransformer("nomic-ai/nomic-embed-text-v1", trust_remote_code=True)
+model = SentenceTransformer(MODEL, trust_remote_code=True)
 
 def get_embedding(data):
     """
@@ -53,7 +55,7 @@ def _create_vector_search_index():
                 }
             ]
         },
-        name="vector_index",  # Name for the index in MongoDB Atlas
+        name="vector-index",  # Name for the index in MongoDB Atlas
         type="vectorSearch",  # Specifies this as a vector search index
     )
 
@@ -78,7 +80,7 @@ def _load_sample_data():
     buffer = []
     inserted_doc_count = 0
     model_info = {
-        "name": model.model_name_or_path,
+        "name": MODEL,
         "created_timestamp": datetime.now().isoformat(),
     }
     for entry in data_entries:
@@ -119,11 +121,11 @@ def setup_vector_search():
     """
     Configures MongoDB Atlas for vector search by creating a search index and ingesting sample data.
 
-    1. Creates a vector search index on the specified collection.
+    1. Creates a vector search index on the specified collection (sans IaC).
     2. Loads sample data with vector embeddings into the collection.
 
     Returns:
         int: Number of documents successfully inserted into the collection.
     """
-    # _create_vector_search_index()
+    # _create_vector_search_index() -- comment this out once IaC solution is in place!
     return _load_sample_data()

@@ -23,7 +23,6 @@ vector_cluster = mongodbatlas.AdvancedCluster(
         "region_configs": [{
             "electable_specs": {
                 "instance_size" : "M0",  # Free tier instance size
-                "node_count": 3
             },
             "provider_name":"TENANT",
             "backing_provider_name":"GCP",
@@ -31,9 +30,7 @@ vector_cluster = mongodbatlas.AdvancedCluster(
             "priority": 7,
         }],
     }],
-    opts=ResourceOptions(
-        ignore_changes=["replication_specs"]
-    ))
+)
 
 # Extract the connection string for use in the collection
 vector_uri = vector_cluster.connection_strings.apply(lambda c: c[0].standard_srv )
@@ -105,14 +102,5 @@ vector_search_index = mongodbatlas.SearchIndex(
     wait_for_index_build_completion=True,
     opts=ResourceOptions(depends_on=[vector_collection])
 )
-
-def _notify_when_ready(args):
-    name, status = args
-    if status == "STEADY":
-        print(f"🎉 Your Vector Search Index '{name}' is ready! 🚀\n"
-              f"Start running vector searches now: 👉\n"
-              f"https://tinyurl.com/vector-search")
-
-pulumi.Output.all(vector_search_index.name, vector_search_index.status).apply(_notify_when_ready)
 
 pulumi.export("MONGODB_URI", vector_uri)
