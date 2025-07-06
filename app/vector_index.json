@@ -1,0 +1,17 @@
+{
+  "name": "vector-index",
+  "type": "vectorSearch",
+  "database": "ww",
+  "collectionName": "facts",
+  "definition": {
+    "fields": [
+      {
+        "type": "vector",
+        "path": "embedding",
+        "numDimensions": 768,
+        "similarity": "dotProduct",
+        "quantization": "scalar"
+      }
+    ]
+  }
+}

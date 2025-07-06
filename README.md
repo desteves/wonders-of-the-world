@@ -18,9 +18,6 @@ This application demonstrates a vector search functionality using MongoDB Atlas 
 # Setup local environment and run application
 make setup-local
 make run
-
-# (optional) Test the endpoint
-make test
 ```
 
 ## Running the vector db in the cloud with IaC
@@ -41,9 +38,6 @@ Launch the application's cloud resources (the vector search database) using Pulu
 # Setup cloud environment (deploys infrastructure and configures app)
 make setup-cloud
 make run
-
-# Test the endpoint
-make test
 ```
 
 ## Docker Usage
@@ -52,12 +46,6 @@ make test
 # Build Docker image
 make build
 make docker-run
-
-# Stop Docker container
-make docker-stop
-
-# Clean up
-make clean
 ```
 
 ## Available Make Commands

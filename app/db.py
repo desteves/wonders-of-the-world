@@ -128,10 +128,10 @@ def setup_vector_search():
         int: Number of documents successfully inserted into the collection.
     """
     # Only setup vector search for local MongoDB instances
-    if 'localhost' in MONGODB_URI:
-        _create_vector_search_index()
-    else:
-        print("Vector search setup skipped for non-local MongoDB instances")
+    # if 'localhost' in MONGODB_URI:
+    #     _create_vector_search_index()
+    # else:
+    #     print("Vector search setup skipped for non-local MongoDB instances")
 
     print("Loading sample data...")
     return _load_sample_data()
