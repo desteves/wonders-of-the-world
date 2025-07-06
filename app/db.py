@@ -14,13 +14,13 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # MongoDB connection setup
-MONGO_URI = os.getenv("MONGO_URI")  # Fetch the MongoDB URI from the .env file
-if not MONGO_URI:
-    raise ValueError("Missing MONGO_URI in the .env file")
+MONGODB_URI = os.getenv("MONGODB_URI")  # Fetch the MongoDB URI from the .env file
+if not MONGODB_URI:
+    raise ValueError("Missing MONGODB_URI in the .env file")
 
 
 MODEL="nomic-ai/nomic-embed-text-v1"
-client = MongoClient(MONGO_URI)
+client = MongoClient(MONGODB_URI)
 db = client["ww"]  # Update this with your database name
 collection = db["facts"]  # Update this with your collection name
 
@@ -127,5 +127,11 @@ def setup_vector_search():
     Returns:
         int: Number of documents successfully inserted into the collection.
     """
-    # _create_vector_search_index() -- comment this out once IaC solution is in place!
+    # Only setup vector search for local MongoDB instances
+    if 'localhost' in MONGODB_URI:
+        _create_vector_search_index()
+    else:
+        print("Vector search setup skipped for non-local MongoDB instances")
+
+    print("Loading sample data...")
     return _load_sample_data()

@@ -5,7 +5,7 @@ app.py: Flask application that provides a /vectorsearch endpoint
 
 from flask import Flask, request, jsonify
 from pymongo.errors import PyMongoError, OperationFailure, NetworkTimeout
-from db import collection, get_embedding #, setup_vector_search  # Import necessary utilities
+from db import collection, get_embedding, setup_vector_search  # Import necessary utilities
 
 app = Flask(__name__)
 
@@ -76,6 +76,4 @@ def vector_search():
 
 
 if __name__ == '__main__':
-    # Uncomment the line below to initialize the database and run the Flask server
-    # setup_vector_search()
     app.run(port=8080, debug=True, host='0.0.0.0')

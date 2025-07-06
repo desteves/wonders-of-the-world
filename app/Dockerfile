@@ -1,29 +1,40 @@
-# Step 1: Use an official Python runtime as the base image
-FROM python:3.12-slim AS base
+# Use Python 3.12 slim image as base
+FROM python:3.12-slim
 
-# Step 2: Set environment variables to prevent Python from writing .pyc files
+# Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+ENV FLASK_ENV=production
 
-# Step 3: Set the working directory in the container
+# Set working directory
 WORKDIR /app
 
-# Step 4: Copy requirements.txt into the container
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements first for better caching
 COPY requirements.txt .
 
-# Step 5: Install dependencies
-RUN pip install --quiet --no-cache-dir -r requirements.txt
+# Install Python dependencies
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
-# Step 6: Copy the rest of the application code into the container
+# Copy application code
 COPY . .
 
-# Step 7: Expose the port the app runs on
+# Create non-root user for security
+RUN useradd --create-home --shell /bin/bash app && \
+    chown -R app:app /app
+USER app
+
+# Expose port
 EXPOSE 8080
 
-# Step 8: Default command to run the application
+# Health check
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8080/vectorsearch?prompt=test || exit 1
+
+# Run the application
 CMD ["python", "app.py"]
-
-# docker build -t  ww .
-# docker run -p 5555:8080 --env-file .env ww
-
-# http://127.0.0.1:5555/vectorsearch?prompt=example
