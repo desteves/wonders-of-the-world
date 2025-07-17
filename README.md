@@ -11,6 +11,9 @@ This application demonstrates a vector search functionality using MongoDB Atlas 
 - **Docker**
 - **Python**
 - **[MongoDB Atlas CLI](https://www.mongodb.com/docs/atlas/cli/current/install-atlas-cli/#install-the-atlas-cli)**
+- **[MongoDB Shell](https://www.mongodb.com/docs/mongodb-shell/install/)**
+
+Run `make help` to see all available commands
 
 ## Running everything locally (offline)
 
@@ -22,12 +25,12 @@ make run
 
 ## Running the vector db in the cloud with IaC
 
-Launch the application's cloud resources (the vector search database) using Pulumi Python.
+Launch the application's cloud resources (the vector search database) using Pulumi.
 
 ### Prerequisites
 
 1. Install the **[Pulumi CLI](https://www.pulumi.com/docs/get-started/install/)**
-2. Set up your **[MongoDB Atlas Environment Variables](https://www.mongodb.com/cloud/atlas/register)
+2. Set up your **[MongoDB Atlas Environment Variables](https://www.mongodb.com/cloud/atlas/register)**
     - `MONGODB_PROJECT_ID`: The MongoDB Atlas project ID where resources will be created.
     - `MONGODB_ATLAS_PUBLIC_KEY`: The public key for MongoDB Atlas API authentication.
     - `MONGODB_ATLAS_PRIVATE_KEY`: The private key for MongoDB Atlas API authentication.
@@ -39,19 +42,6 @@ Launch the application's cloud resources (the vector search database) using Pulu
 make setup-cloud
 make run
 ```
-
-## Docker Usage
-
-```sh
-# Build Docker image
-make build
-make docker-run
-```
-
-## Available Make Commands
-
-Run `make help` to see all available commands
-
 
 ## License
 

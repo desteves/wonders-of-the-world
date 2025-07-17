@@ -76,7 +76,7 @@ def _load_sample_data():
         print(f"Error reading data.json: {str(e)}")
         return 0
 
-    bulk_size = 20
+    bulk_size = 100
     buffer = []
     inserted_doc_count = 0
     model_info = {

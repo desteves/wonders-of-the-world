@@ -3,7 +3,11 @@ DOCKER_IMAGE := wonders-of-the-world:latest
 DOCKER_CONTAINER := wonders-app
 APP_DIR := app
 INFRA_DIR := infra
-MONGODB_URI_LOCAL := mongodb://localhost:27007/?directConnection=true
+MONGODB_URI_LOCAL := mongodb://localhost:27007/ww?directConnection=true
+MONGODB_PROJECT_ID=671822b16da2717cd63d86a5
+MONGODB_ATLAS_PUBLIC_KEY=jpxvuvfz
+MONGODB_ATLAS_PRIVATE_KEY=d1bfa12b-d6d9-4573-9d68-1a4b3ffabd7e
+PULUMI_CONFIG_PASSPHRASE=local
 
 .PHONY: help build run clean clean-docker clean-local test docker-run docker-stop setup-local setup-cloud setup-venv
 
@@ -53,17 +57,34 @@ setup-local:
 		echo "MDB entry already exists in /etc/hosts"; \
 	fi
 	@cd $(APP_DIR) && atlas deployments setup MDB --type LOCAL --port 27007 --force
-	@cd $(APP_DIR) && atlas deployments search indexes create --file vector_index.json
+	@echo "Creating collection"
 	@cd $(APP_DIR) && echo "MONGODB_URI=$(MONGODB_URI_LOCAL)" > .env
+	@mongosh $(MONGODB_URI_LOCAL) --eval "db.createCollection('facts');"
+	@cd $(APP_DIR) && atlas deployments search indexes create --file vector_index.json
 	@echo "Local environment setup complete!"
 
 # Setup cloud environment
 setup-cloud:
 	@echo "Setting up cloud environment..."
+	@echo "Loading environment variables from infra/.env..."
+	@echo "Checking MongoDB Atlas environment variables..."
+	@if [ -z "$$MONGODB_PROJECT_ID" ] || [ -z "$$MONGODB_ATLAS_PUBLIC_KEY" ] || [ -z "$$MONGODB_ATLAS_PRIVATE_KEY" ]; then \
+		echo "Error: Required MongoDB Atlas environment variables are not set."; \
+		echo "Please set the following environment variables:"; \
+		echo "  MONGODB_PROJECT_ID: Your MongoDB Atlas project ID"; \
+		echo "  MONGODB_ATLAS_PUBLIC_KEY: Your MongoDB Atlas public API key"; \
+		echo "  MONGODB_ATLAS_PRIVATE_KEY: Your MongoDB Atlas private API key"; \
+		echo ""; \
+		echo "You can set them with:"; \
+		echo "  export MONGODB_PROJECT_ID=your_project_id"; \
+		echo "  export MONGODB_ATLAS_PUBLIC_KEY=your_public_key"; \
+		echo "  export MONGODB_ATLAS_PRIVATE_KEY=your_private_key"; \
+		exit 1; \
+	fi
 	$(MAKE) setup-venv DIR=$(APP_DIR)
 	@echo "Setting up infrastructure with Pulumi..."
 	$(MAKE) setup-venv DIR=$(INFRA_DIR)
-	@cd $(INFRA_DIR) && source venv/bin/activate && pulumi up
+	@cd $(INFRA_DIR) && source venv/bin/activate && pulumi login --local && pulumi up --non-interactive --stack vectorinfra --yes
 	@echo "Getting MongoDB URI from Pulumi output..."
 	@cd $(INFRA_DIR) && source venv/bin/activate && echo "MONGODB_URI=$$(pulumi stack output MONGODB_URI)" >> ../$(APP_DIR)/.env
 	@echo "Cloud environment setup complete!"

@@ -76,4 +76,5 @@ def vector_search():
 
 
 if __name__ == '__main__':
+    setup_vector_search()
     app.run(port=8080, debug=True, host='0.0.0.0')
