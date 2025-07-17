@@ -1,27 +1,27 @@
+# Makefile for Wonders of the World
+#
+# Environment variables are loaded from a .env file in the project root.
+# Please create a .env file with the required variables, e.g.:
+# MONGODB_ATLAS_PROJECT_ID=your_project_id
+# MONGODB_ATLAS_PUBLIC_KEY=your_public_key
+# MONGODB_ATLAS_PRIVATE_KEY=your_private_key
+# PULUMI_ACCESS_TOKEN=your_pulumi_access_token
+# PULUMI_CONFIG_PASSPHRASE=your_passphrase
+
 # Variables
-DOCKER_IMAGE := wonders-of-the-world:latest
-DOCKER_CONTAINER := wonders-app
 APP_DIR := app
 INFRA_DIR := infra
 MONGODB_URI_LOCAL := mongodb://localhost:27007/ww?directConnection=true
-MONGODB_PROJECT_ID=671822b16da2717cd63d86a5
-MONGODB_ATLAS_PUBLIC_KEY=jpxvuvfz
-MONGODB_ATLAS_PRIVATE_KEY=d1bfa12b-d6d9-4573-9d68-1a4b3ffabd7e
-PULUMI_CONFIG_PASSPHRASE=local
 
-.PHONY: help build run clean clean-docker clean-local test docker-run docker-stop setup-local setup-cloud setup-venv
+.PHONY: help run clean clean-local test setup-local setup-cloud setup-venv
 
 # Default target
 help:
 	@echo "Available commands:"
 	@echo "  setup-local    - Setup local environment (venv + vector db)"
 	@echo "  setup-cloud    - Setup cloud environment (venv + cloud db)"
-	@echo "  build          - Build Docker image"
 	@echo "  run            - Run application locally"
-	@echo "  docker-run     - Run application in Docker"
-	@echo "  docker-stop    - Stop Docker container"
-	@echo "  clean          - Clean up generated files and Docker"
-	@echo "  clean-docker   - Clean up Docker resources"
+	@echo "  clean          - Clean up generated files"
 	@echo "  clean-local    - Clean up local Atlas deployment and venvs"
 	@echo "  test           - Test vector search endpoint"
 
@@ -31,7 +31,7 @@ check-command = @if ! command -v $(1) &> /dev/null; then \
 	exit 1; \
 fi
 
-# Setup virtual environment in specified directory
+# Set up virtual environment in specified directory
 setup-venv:
 	@echo "Setting up Python virtual environment in $(DIR)..."
 	$(call check-command,python3)
@@ -65,68 +65,54 @@ setup-local:
 
 # Setup cloud environment
 setup-cloud:
-	@echo "Setting up cloud environment..."
-	@echo "Loading environment variables from infra/.env..."
-	@echo "Checking MongoDB Atlas environment variables..."
-	@if [ -z "$$MONGODB_PROJECT_ID" ] || [ -z "$$MONGODB_ATLAS_PUBLIC_KEY" ] || [ -z "$$MONGODB_ATLAS_PRIVATE_KEY" ]; then \
+	@set -a; [ -f .env ] && source .env; set +a; \
+	echo "Setting up cloud environment..."; \
+	echo "Loading environment variables from infra/.env..."; \
+	echo "Checking MongoDB Atlas environment variables..."; \
+	if [ -z "$$MONGODB_ATLAS_PROJECT_ID" ] || [ -z "$$MONGODB_ATLAS_PUBLIC_KEY" ] || [ -z "$$MONGODB_ATLAS_PRIVATE_KEY" ]; then \
 		echo "Error: Required MongoDB Atlas environment variables are not set."; \
 		echo "Please set the following environment variables:"; \
-		echo "  MONGODB_PROJECT_ID: Your MongoDB Atlas project ID"; \
+		echo "  MONGODB_ATLAS_PROJECT_ID: Your MongoDB Atlas project ID"; \
 		echo "  MONGODB_ATLAS_PUBLIC_KEY: Your MongoDB Atlas public API key"; \
 		echo "  MONGODB_ATLAS_PRIVATE_KEY: Your MongoDB Atlas private API key"; \
 		echo ""; \
-		echo "You can set them with:"; \
-		echo "  export MONGODB_PROJECT_ID=your_project_id"; \
-		echo "  export MONGODB_ATLAS_PUBLIC_KEY=your_public_key"; \
-		echo "  export MONGODB_ATLAS_PRIVATE_KEY=your_private_key"; \
+		echo "You can set them in your .env file or with export."; \
 		exit 1; \
-	fi
-	$(MAKE) setup-venv DIR=$(APP_DIR)
-	@echo "Setting up infrastructure with Pulumi..."
-	$(MAKE) setup-venv DIR=$(INFRA_DIR)
-	@cd $(INFRA_DIR) && source venv/bin/activate && pulumi login --local && pulumi up --non-interactive --stack vectorinfra --yes
-	@echo "Getting MongoDB URI from Pulumi output..."
-	@cd $(INFRA_DIR) && source venv/bin/activate && echo "MONGODB_URI=$$(pulumi stack output MONGODB_URI)" >> ../$(APP_DIR)/.env
-	@echo "Cloud environment setup complete!"
+	fi; \
+	echo "Checking Pulumi Access Token..."; \
+	if [ -z "$$PULUMI_ACCESS_TOKEN" ]; then \
+		echo "Error: PULUMI_ACCESS_TOKEN environment variable is not set."; \
+		echo "Please set it with:"; \
+		echo "  export PULUMI_ACCESS_TOKEN=your_pulumi_access_token"; \
+		exit 1; \
+	fi; \
+	echo "Checking Pulumi Config Passphrase..."; \
+    if [ -z "$$PULUMI_CONFIG_PASSPHRASE" ]; then \
+        echo "Error: PULUMI_CONFIG_PASSPHRASE environment variable is not set."; \
+        echo "Please set it in your .env file or with:"; \
+        echo "  export PULUMI_CONFIG_PASSPHRASE=your_passphrase"; \
+        exit 1; \
+    fi; \
+	$(MAKE) setup-venv DIR=$(APP_DIR); \
+	echo "Setting up infrastructure with Pulumi..."; \
+	$(MAKE) setup-venv DIR=$(INFRA_DIR); \
+	cd $(INFRA_DIR) && 	source venv/bin/activate; \
+	pulumi --non-interactive login; \
+	pulumi --non-interactive stack init vectorinfra || true; \
+	pulumi --non-interactive up  --stack vectorinfra --yes; \
+	echo "MONGODB_URI=$$(pulumi stack output MONGODB_URI --show-secrets)" > ../$(APP_DIR)/.env; \
+	echo "Cloud environment setup complete! "
 
-# Build Docker image
-build:
-	@echo "Building Docker image..."
-	docker build -t $(DOCKER_IMAGE) $(APP_DIR)/
-	@echo "Docker image built successfully!"
-
-# Run application locally
+# Run application
 run:
-	@echo "Running application locally..."
+	@echo "Running application ..."
 	cd $(APP_DIR) && source venv/bin/activate && python app.py > app.log 2>&1 &
-
-# Run application in Docker
-docker-run:
-	@echo "Running application in Docker..."
-	docker run -d --name $(DOCKER_CONTAINER) -p 8080:8080 --env-file $(APP_DIR)/.env $(DOCKER_IMAGE)
-	@echo "Application running on http://localhost:8080"
-
-# Stop Docker container
-docker-stop:
-	@echo "Stopping Docker container..."
-	docker stop $(DOCKER_CONTAINER) || true
-	docker rm $(DOCKER_CONTAINER) || true
-	@echo "Docker container stopped and removed"
-
-# Clean up Docker resources
-clean-docker:
-	@echo "Cleaning up Docker resources..."
-	docker stop $(DOCKER_CONTAINER) || true
-	docker rm $(DOCKER_CONTAINER) || true
-	docker rmi $(DOCKER_IMAGE) || true
-	@echo "Docker cleanup complete!"
 
 # Clean up generated files
 clean:
 	@echo "Cleaning up generated files..."
 	rm -rf $(APP_DIR)/venv $(INFRA_DIR)/venv
 	rm -f $(APP_DIR)/app.log $(APP_DIR)/.env
-	$(MAKE) clean-docker
 	@echo "Cleanup complete!"
 
 # Clean up local Atlas deployment and deactivate venvs

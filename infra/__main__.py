@@ -10,12 +10,12 @@ import pulumi_mongodbatlas as mongodbatlas  # Pulumi MongoDB Atlas provider
 
 # Local application imports
 from mongodb_collection import MongoDBCollection  # Custom Pulumi resource
-from config import MONGODB_PROJECT_ID, IP_ADDRESS, VECTOR_DATABASE, VECTOR_COLLECTION, VECTOR_USER, VECTOR_PASSWORD
+from config import MONGODB_ATLAS_PROJECT_ID, IP_ADDRESS, VECTOR_DATABASE, VECTOR_COLLECTION, VECTOR_USER, VECTOR_PASSWORD
 
 # Create a *free* MongoDB Atlas cluster running on Google Cloud
 vector_cluster = mongodbatlas.AdvancedCluster(
     "vector-cluster",
-    project_id=MONGODB_PROJECT_ID,
+    project_id=MONGODB_ATLAS_PROJECT_ID,
     name="vector-cluster",
     cluster_type="REPLICASET",
     replication_specs=[{
@@ -38,7 +38,7 @@ vector_uri = vector_cluster.connection_strings.apply(lambda c: c[0].standard_srv
 # Create a database user for the cluster with specific privileges
 vector_user = mongodbatlas.DatabaseUser(
     "vector-user",
-    project_id=MONGODB_PROJECT_ID,
+    project_id=MONGODB_ATLAS_PROJECT_ID,
     username=VECTOR_USER,
     password=VECTOR_PASSWORD,
     auth_database_name="admin",
@@ -57,7 +57,7 @@ vector_user = mongodbatlas.DatabaseUser(
 # Adds the current IP to the access list of the project
 my_current_ip = mongodbatlas.ProjectIpAccessList(
     "my-current-ip",
-    project_id=MONGODB_PROJECT_ID,
+    project_id=MONGODB_ATLAS_PROJECT_ID,
     ip_address=IP_ADDRESS,
     comment = "Enable local cluster access.",
     opts=ResourceOptions(additional_secret_outputs=['ip_address'])
@@ -92,7 +92,7 @@ vector_search_index_fields = [
 # Ensure collection is created before proceeding
 vector_search_index = mongodbatlas.SearchIndex(
     "vector-index",
-    project_id=MONGODB_PROJECT_ID,
+    project_id=MONGODB_ATLAS_PROJECT_ID,
     name="vector-index",
     cluster_name=vector_cluster.name,
     database=VECTOR_DATABASE,
@@ -103,4 +103,8 @@ vector_search_index = mongodbatlas.SearchIndex(
     opts=ResourceOptions(depends_on=[vector_collection])
 )
 
-pulumi.export("MONGODB_URI", vector_uri)
+# Export a full MongoDB URI with credentials and database
+full_mongodb_uri = pulumi.Output.all(VECTOR_USER, VECTOR_PASSWORD, vector_uri, VECTOR_DATABASE).apply(
+    lambda args: f"mongodb+srv://{args[0]}:{args[1]}@{args[2].split('://')[1]}/{args[3]}?retryWrites=true&w=majority"
+)
+pulumi.export("MONGODB_URI", pulumi.Output.secret(full_mongodb_uri))

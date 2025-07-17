@@ -1,1 +1,5 @@
 RECYCLE_BIN**
+
+.env
+**.env
+app/app.log

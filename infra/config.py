@@ -7,7 +7,7 @@ If an IP address is not set, the module dynamically fetches it using
 the "get_public_ip" function.
 
 Environment Variables:
-- MONGODB_PROJECT_ID: The MongoDB Atlas project ID where resources will be created.
+- MONGODB_ATLAS_PROJECT_ID: The MongoDB Atlas project ID where resources will be created.
 - MONGODB_ATLAS_PUBLIC_KEY: The public key for MongoDB Atlas API authentication.
 - MONGODB_ATLAS_PRIVATE_KEY: The private key for MongoDB Atlas API authentication.
 - IP_ADDRESS: The public IP address to be used for accessing MongoDB Atlas resources.
@@ -39,17 +39,12 @@ atlas_config = Config("mongodbatlas")
 load_dotenv()
 
 # MongoDB Atlas project where the resources will be created
-MONGODB_PROJECT_ID = pulumi_config.get('mongodbatlas_projectId') or os.getenv("MONGODB_PROJECT_ID")
-if not MONGODB_PROJECT_ID:
-    print(
-        "❌ Missing MONGODB_PROJECT_ID.\n"
-        "[Preferred] Please set it via\n"
-        "pulumi config set mongodbatlas_projectId <projectId>\n"
-        "[Alternative] Please add an entry in your .env file.\n"
-        "Need a project? Follow these steps to create one: 👉\n"
-        "https://tinyurl.com/config-project"
+MONGODB_ATLAS_PROJECT_ID = pulumi_config.get('mongodbatlas_projectId') or os.getenv("MONGODB_ATLAS_PROJECT_ID")
+if not MONGODB_ATLAS_PROJECT_ID:
+    raise Exception(
+        "❌ Missing MONGODB_ATLAS_PROJECT_ID.\n"
+        "Set it in your environment or Pulumi config.\n"
     )
-    sys.exit(1)
 
 
 # If your MongoDB Atlas Organization has
