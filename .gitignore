@@ -3,3 +3,4 @@ RECYCLE_BIN**
 .env
 **.env
 app/app.log
+.cursor/mcp.json

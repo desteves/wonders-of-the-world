@@ -2,13 +2,24 @@
 db.py: Handles MongoDB connection, embedding generation, and setup for vector search functionality.
 """
 
-import os
+from pathlib import Path
+
 import json
+import logging
+import os
 from datetime import datetime
-from pymongo import MongoClient
-from pymongo.operations import SearchIndexModel
-from sentence_transformers import SentenceTransformer
+
+from bson.binary import Binary, BinaryVectorDtype
 from dotenv import load_dotenv
+from pymongo import MongoClient
+from pymongo.errors import PyMongoError
+from pymongo.operations import SearchIndexModel
+
+from .embeddings import (
+    get_embedding,
+    get_embedding_dimension,
+    get_embedding_model_info,
+)
 
 # Load environment variables from .env file
 load_dotenv()
@@ -18,108 +29,157 @@ MONGODB_URI = os.getenv("MONGODB_URI")  # Fetch the MongoDB URI from the .env fi
 if not MONGODB_URI:
     raise ValueError("Missing MONGODB_URI in the .env file")
 
+LOGGER = logging.getLogger(__name__)
 
-MODEL="nomic-ai/nomic-embed-text-v1"
-client = MongoClient(MONGODB_URI)
-db = client["ww"]  # Update this with your database name
-collection = db["facts"]  # Update this with your collection name
+MONGO_CLIENT = MongoClient(MONGODB_URI)
+COLLECTION = MONGO_CLIENT["ww"]["facts"]  # Update database and collection names as needed
 
-# Load the embedding model
-model = SentenceTransformer(MODEL, trust_remote_code=True)
 
-def get_embedding(data):
-    """
-    Generates vector embeddings for the given data using the SentenceTransformer model.
 
-    Args:
-        data (str): Input data to generate embeddings for.
-
-    Returns:
-        List[float]: Vector embeddings as a list of floats.
-    """
-    embedding = model.encode(data)
-    return embedding.tolist()
+def _search_not_enabled(exc: Exception) -> bool:
+    """Detect whether a PyMongo error indicates Atlas Search is unavailable."""
+    details = getattr(exc, "details", None)
+    if isinstance(details, dict):
+        code = details.get("code")
+        code_name = details.get("codeName")
+        message = details.get("errmsg") or str(exc)
+    else:
+        code = None
+        code_name = None
+        message = str(exc)
+    if code == 31082 or code_name == "SearchNotEnabled":
+        return True
+    return "SearchNotEnabled" in message or "requires additional configuration" in message
 
 
 def _create_vector_search_index():
-    # Create vector search index definition
+    """Create or update the vector search index to match the embedding configuration."""
+    num_dimensions = get_embedding_dimension()
+
     search_index_model = SearchIndexModel(
         definition={
             "fields": [
                 {
                     "type": "vector",
-                    "path": "embedding",       # Field for vector embeddings
-                    "numDimensions": 768,     # Adjust this to match your embedding dimensions
-                    "similarity": "dotProduct",  # Similarity metric (e.g., cosine, dotProduct)
-                    "quantization": "scalar"     # Quantization type
+                    "path": "embedding",
+                    "numDimensions": num_dimensions,
+                    "similarity": "dotProduct",
+                    "quantization": "scalar",
                 }
             ]
         },
-        name="vector-index",  # Name for the index in MongoDB Atlas
-        type="vectorSearch",  # Specifies this as a vector search index
+        name="vector-index",
+        type="vectorSearch",
     )
 
-    # Create the search index (if not already created)
     try:
-        collection.create_search_index(model=search_index_model)
-        print("Search index 'vector_index' created successfully.")
-    except Exception as e:
-        print(f"Error creating search index: {str(e)}")
+        existing_index = next(COLLECTION.list_search_indexes(name="vector-index"), None)
+    except PyMongoError as exc:
+        if _search_not_enabled(exc):
+            LOGGER.warning("Vector search commands unavailable; skipping index setup (%s)", exc)
+            return
+        LOGGER.error("Error checking search index state: %s", exc)
+        existing_index = None
+
+    if existing_index:
+        latest_definition = existing_index.get("latestDefinition") or existing_index.get("definition") or {}
+        fields = latest_definition.get("fields", [])
+        existing_dimensions = next(
+            (field.get("numDimensions") for field in fields if field.get("path") == "embedding"),
+            None,
+        )
+
+        if existing_dimensions == num_dimensions:
+            LOGGER.info("Search index 'vector-index' already matches the expected definition.")
+            return
+
+        LOGGER.info("Updating search index 'vector-index' to match Voyage embedding dimensions...")
+        try:
+            COLLECTION.update_search_index(
+                "vector-index",
+                search_index_model.document["definition"],
+            )
+            LOGGER.info("Search index 'vector-index' updated successfully.")
+        except PyMongoError as exc:
+            if _search_not_enabled(exc):
+                LOGGER.warning("Vector search update unsupported; skipping (%s)", exc)
+                return
+            LOGGER.error("Error updating search index: %s", exc)
+        return
+
+    try:
+        COLLECTION.create_search_index(model=search_index_model)
+        LOGGER.info("Search index 'vector-index' created successfully.")
+    except PyMongoError as exc:
+        if _search_not_enabled(exc):
+            LOGGER.warning("Vector search creation unsupported; skipping (%s)", exc)
+            return
+        LOGGER.error("Error creating search index: %s", exc)
+
 
 def _load_sample_data():
+    """
+    Ingest sample documents with Voyage embeddings into MongoDB.
 
+    Returns:
+        int: Count of documents successfully inserted.
+    """
+
+    data_path = Path(__file__).resolve().parent / "data.json"
     # Read data from data.json
     try:
-        with open("data.json", encoding="utf-8") as file:
+        with open(data_path, encoding="utf-8") as file:
             data_entries = json.load(file)
-    except Exception as e:
-        print(f"Error reading data.json: {str(e)}")
+    except (OSError, json.JSONDecodeError) as exc:
+        LOGGER.error("Error reading data.json: %s", exc)
         return 0
 
     bulk_size = 100
     buffer = []
     inserted_doc_count = 0
     model_info = {
-        "name": MODEL,
+        **get_embedding_model_info(),
         "created_timestamp": datetime.now().isoformat(),
     }
     for entry in data_entries:
-        if 'text' in entry:
-            text = entry['text']
-            _id = entry['_id']
-            embedding = get_embedding(text)  # Generate embedding for each text
+        if "text" not in entry:
+            continue
 
-            # Prepare the document
-            document = {
-                "_id": _id,
-                "text": text,
-                "embedding": embedding,
-                "model_info": model_info
-            }
-            buffer.append(document)
+        text = entry["text"]
+        _id = entry["_id"]
+        embedding = get_embedding(text)
 
-            # If buffer reaches the bulk_size, perform batch insert
-            if len(buffer) == bulk_size:
-                try:
-                    collection.insert_many(buffer)
-                    inserted_doc_count += len(buffer)
-                    buffer.clear()  # Clear buffer after insert
-                except Exception as e:
-                    print(f"Error inserting documents: {str(e)}")
-    # Insert any remaining documents in the buffer
+        document = {
+            "_id": _id,
+            "text": text,
+            "embedding": Binary.from_vector(embedding.tolist(), BinaryVectorDtype.FLOAT32),
+            "model_info": model_info,
+        }
+        buffer.append(document)
+
+        if len(buffer) == bulk_size:
+            try:
+                COLLECTION.insert_many(buffer, ordered=False)
+                inserted_doc_count += len(buffer)
+            except PyMongoError as exc:
+                LOGGER.error("Error inserting documents: %s", exc)
+            finally:
+                buffer.clear()
+
     if buffer:
         try:
-            collection.insert_many(buffer)
+            COLLECTION.insert_many(buffer, ordered=False)
             inserted_doc_count += len(buffer)
-        except Exception as e:
-            print(f"Error inserting remaining documents: {str(e)}")
-    print(f"Inserted {inserted_doc_count} documents.")
+        except PyMongoError as exc:
+            LOGGER.error("Error inserting remaining documents: %s", exc)
+
+    LOGGER.info("Inserted %s documents.", inserted_doc_count)
     return inserted_doc_count
 
 
 def setup_vector_search():
     """
-    Configures MongoDB Atlas for vector search by creating a search index and ingesting sample data.
+    Configure MongoDB Atlas for vector search by creating a search index and ingesting sample data.
 
     1. Creates a vector search index on the specified collection (sans IaC).
     2. Loads sample data with vector embeddings into the collection.
@@ -127,11 +187,7 @@ def setup_vector_search():
     Returns:
         int: Number of documents successfully inserted into the collection.
     """
-    # Only setup vector search for local MongoDB instances
-    # if 'localhost' in MONGODB_URI:
-    #     _create_vector_search_index()
-    # else:
-    #     print("Vector search setup skipped for non-local MongoDB instances")
-
-    print("Loading sample data...")
+    LOGGER.info("Ensuring vector search index...")
+    _create_vector_search_index()
+    LOGGER.info("Loading sample data...")
     return _load_sample_data()

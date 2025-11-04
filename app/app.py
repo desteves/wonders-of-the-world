@@ -5,7 +5,9 @@ app.py: Flask application that provides a /vectorsearch endpoint
 
 from flask import Flask, request, jsonify
 from pymongo.errors import PyMongoError, OperationFailure, NetworkTimeout
-from db import collection, get_embedding, setup_vector_search  # Import necessary utilities
+
+from .db import COLLECTION, setup_vector_search  # Import necessary utilities
+from .embeddings import get_embedding
 
 app = Flask(__name__)
 
@@ -29,7 +31,7 @@ def vector_search():
         }), 400
 
     # Generate the embedding for the user's input
-    query_embedding = get_embedding(prompt)
+    query_embedding = get_embedding(prompt).tolist()
 
     # Vector search pipeline
     pipeline = [
@@ -38,7 +40,7 @@ def vector_search():
                 "index": "vector-index",  # Update this to match your vector search index name
                 "queryVector": query_embedding,
                 "path": "embedding",  # The field in the collection where embeddings are stored
-                "exact": True,
+                "numCandidates": 200,
                 "limit": 5  # Limit the number of results returned
             }
         },
@@ -60,7 +62,7 @@ def vector_search():
     # Fetch results using the aggregation pipeline
     data = []
     try:
-        results = collection.aggregate(pipeline)
+        results = COLLECTION.aggregate(pipeline)
         for doc in results:
             data.append(doc)
     except (PyMongoError, OperationFailure, NetworkTimeout) as e:  # Catch specific MongoDB errors

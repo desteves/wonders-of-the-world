@@ -1,0 +1,84 @@
+services:
+  mongo:
+    image: mongodb/mongodb-community-server:8.2.0-ubi8
+    container_name: wonders-mongo
+    restart: unless-stopped
+    command: ["mongod", "--config", "/etc/mongod.conf"]
+    ports:
+      - "27777:27777"
+    volumes:
+      - ./mongo-config/mongod.conf:/etc/mongod.conf:ro
+      - ./mongo-config/keyfile:/etc/mongo-keyfile:ro
+      - ./mongo-init:/docker-entrypoint-initdb.d:ro
+      - mongo-data:/data/db
+    environment:
+      MONGODB_INITDB_ROOT_USERNAME: root
+      MONGODB_INITDB_ROOT_PASSWORD: example
+    networks:
+      - wonders-net
+
+  search:
+    image: mongodb/mongodb-community-search:latest
+    container_name: wonders-search
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_started
+      mongo-rs-init:
+        condition: service_completed_successfully
+    ports:
+      - "27028:27028"
+      - "9946:9946"
+    volumes:
+      - ./search-config/mongot.conf:/mongot-community/config.default.yml:ro
+      - ./search-config/pwfile:/mongot-community/pwfile:ro
+      - search-data:/data/mongot
+    networks:
+      - wonders-net
+
+  mongo-rs-init:
+    image: mongo:7.0
+    container_name: wonders-mongo-rs-init
+    depends_on:
+      - mongo
+    restart: "no"
+    volumes:
+      - ./mongo-init/replica-set-init.js:/scripts/replica-set-init.js:ro
+    entrypoint:
+      - bash
+      - -lc
+      - |
+        set -e
+        until mongosh "mongodb://root:example@mongo:27777/admin?authSource=admin" --quiet --eval "db.runCommand({ ping: 1 })" >/dev/null 2>&1; do
+          sleep 2
+        done
+        mongosh "mongodb://root:example@mongo:27777/admin?authSource=admin" /scripts/replica-set-init.js
+    networks:
+      - wonders-net
+
+  app:
+    build:
+      context: ./app
+    container_name: wonders-app
+    depends_on:
+      mongo:
+        condition: service_started
+      mongo-rs-init:
+        condition: service_completed_successfully
+      search:
+        condition: service_started
+    environment:
+      MONGODB_URI: mongodb://root:example@mongo:27777/ww?authSource=admin&replicaSet=wonders-rs
+      VOYAGE_API_KEY: ${VOYAGE_API_KEY}
+    ports:
+      - "8080:8080"
+    command: ["python", "-m", "app.app"]
+    networks:
+      - wonders-net
+
+volumes:
+  mongo-data:
+  search-data:
+
+networks:
+  wonders-net:
