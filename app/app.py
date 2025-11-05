@@ -6,7 +6,12 @@ app.py: Flask application that provides a /vectorsearch endpoint
 from flask import Flask, request, jsonify
 from pymongo.errors import PyMongoError, OperationFailure, NetworkTimeout
 
-from .db import COLLECTION, setup_vector_search  # Import necessary utilities
+from .db import (
+    COLLECTION,
+    VECTOR_INDEX_NAME,
+    ensure_vector_search_ready,
+    setup_vector_search,
+)  # Import necessary utilities
 from .embeddings import get_embedding
 
 app = Flask(__name__)
@@ -30,6 +35,19 @@ def vector_search():
             "error": "Missing required query parameter 'prompt'"
         }), 400
 
+    # Ensure the vector index is available before querying
+    index_ready, index_message = ensure_vector_search_ready()
+    if not index_ready:
+        return (
+            jsonify(
+                {
+                    "error": index_message
+                    or f"Vector index '{VECTOR_INDEX_NAME}' is not ready for queries."
+                }
+            ),
+            503,
+        )
+
     # Generate the embedding for the user's input
     query_embedding = get_embedding(prompt).tolist()
 
@@ -37,7 +55,7 @@ def vector_search():
     pipeline = [
         {
             "$vectorSearch": {
-                "index": "vector-index",  # Update this to match your vector search index name
+                "index": VECTOR_INDEX_NAME,
                 "queryVector": query_embedding,
                 "path": "embedding",  # The field in the collection where embeddings are stored
                 "numCandidates": 200,

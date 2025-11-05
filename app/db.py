@@ -33,6 +33,7 @@ LOGGER = logging.getLogger(__name__)
 
 MONGO_CLIENT = MongoClient(MONGODB_URI)
 COLLECTION = MONGO_CLIENT["ww"]["facts"]  # Update database and collection names as needed
+VECTOR_INDEX_NAME = "vector-index"
 
 
 
@@ -73,7 +74,7 @@ def _create_vector_search_index():
     )
 
     try:
-        existing_index = next(COLLECTION.list_search_indexes(name="vector-index"), None)
+        existing_index = next(COLLECTION.list_search_indexes(name=VECTOR_INDEX_NAME), None)
     except PyMongoError as exc:
         if _search_not_enabled(exc):
             LOGGER.warning("Vector search commands unavailable; skipping index setup (%s)", exc)
@@ -90,16 +91,16 @@ def _create_vector_search_index():
         )
 
         if existing_dimensions == num_dimensions:
-            LOGGER.info("Search index 'vector-index' already matches the expected definition.")
+            LOGGER.info("Search index '%s' already matches the expected definition.", VECTOR_INDEX_NAME)
             return
 
-        LOGGER.info("Updating search index 'vector-index' to match Voyage embedding dimensions...")
+        LOGGER.info("Updating search index '%s' to match Voyage embedding dimensions...", VECTOR_INDEX_NAME)
         try:
             COLLECTION.update_search_index(
-                "vector-index",
+                VECTOR_INDEX_NAME,
                 search_index_model.document["definition"],
             )
-            LOGGER.info("Search index 'vector-index' updated successfully.")
+            LOGGER.info("Search index '%s' updated successfully.", VECTOR_INDEX_NAME)
         except PyMongoError as exc:
             if _search_not_enabled(exc):
                 LOGGER.warning("Vector search update unsupported; skipping (%s)", exc)
@@ -109,12 +110,42 @@ def _create_vector_search_index():
 
     try:
         COLLECTION.create_search_index(model=search_index_model)
-        LOGGER.info("Search index 'vector-index' created successfully.")
+        LOGGER.info("Search index '%s' created successfully.", VECTOR_INDEX_NAME)
     except PyMongoError as exc:
         if _search_not_enabled(exc):
             LOGGER.warning("Vector search creation unsupported; skipping (%s)", exc)
             return
         LOGGER.error("Error creating search index: %s", exc)
+
+
+def ensure_vector_search_ready() -> tuple[bool, str | None]:
+    """
+    Verify the vector index exists and is queryable.
+
+    Returns:
+        tuple[bool, str | None]: (ready, message). Message populated when not ready.
+    """
+    try:
+        index_info = next(COLLECTION.list_search_indexes(name=VECTOR_INDEX_NAME), None)
+    except PyMongoError as exc:
+        if _search_not_enabled(exc):
+            return False, "Vector search commands unavailable on current deployment."
+        LOGGER.error("Error retrieving vector index state: %s", exc)
+        return False, "Error retrieving vector index state."
+
+    if not index_info:
+        return False, f"Vector index '{VECTOR_INDEX_NAME}' is missing."
+
+    status = index_info.get("status") or {}
+    state = status.get("state") or index_info.get("state")
+    if isinstance(state, str) and state.upper() not in {"AVAILABLE", "READY", "QUERYABLE"}:
+        return False, f"Vector index '{VECTOR_INDEX_NAME}' state is '{state}'."
+
+    queryable = status.get("queryable", index_info.get("queryable"))
+    if isinstance(queryable, bool) and not queryable:
+        return False, f"Vector index '{VECTOR_INDEX_NAME}' is not queryable yet."
+
+    return True, None
 
 
 def _load_sample_data():
