@@ -2,5 +2,9 @@ RECYCLE_BIN**
 
 .env
 **.env
-app/app.log
-.cursor/mcp.json
+**.log
+**__pycache__**
+*.pyc
+*.pyo
+venv/
+.venv/

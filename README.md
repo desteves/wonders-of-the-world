@@ -1,31 +1,34 @@
 # Wonders of the World
 
-Search fun facts about the Wonders of the World using semantic similarity.
-This project combines MongoDB 8.2 Community’s native vector search with Voyage AI’s `voyage-3-large` embeddings, served through a Flask API.
+Search fun facts about the Wonders of the World using semantic similarity. Locally it runs MongoDB 8.2 Community vector search with Voyage AI’s `voyage-3-large` embeddings behind a small Flask API. IaC samples show how to spin up the same stack on MongoDB Atlas and Google Cloud.
 
 ## Requirements
 
-- Python 3.11+
-- MongoDB 8.2+
-- [Voyage AI](https://www.voyageai.com/) account + [API key](https://dashboard.voyageai.com/organization/api-keys)
-- Docker + Docker Compose (Make sho' it's running!!!)
+- [Voyage AI](https://www.voyageai.com/) API key
+- [Docker](https://docs.docker.com/get-docker/) + [Docker Compose](https://docs.docker.com/compose/)
+- For IaC:
+  - Either [Pulumi](https://www.pulumi.com/) or [Terraform](https://www.terraform.io/)
+  - [MongoDB Atlas API keys](https://www.mongodb.com/docs/atlas/configure-api-access/) + [Google Cloud credentials](https://cloud.google.com/iam/docs/keys-create) (for the cloud deploy path)
 
-## Run
-
-```sh
-VOYAGE_API_KEY=your_key docker compose up --build -d
-```
+## Quick start (local)
 
 ```sh
-# test the flask api
-curl -f http://localhost:8080/vectorsearch?prompt=religion
+export VOYAGE_API_KEY=your_key
+docker compose up --build
+curl "http://localhost:8080/vectorsearch?prompt=religion"
 ```
 
-Stop and remove containers/volumes when finished:
+Notes:
+- The app seeds `ww.facts` and builds a vector index at startup; duplicate-key warnings on restarts are harmless.
+- If curl says “connection reset by peer,” wait for the Flask reloader to finish and retry.
 
-```sh
-docker compose down -v
-```
+## Deploy to the cloud (via Infrastructure as Code)
+
+See:
+- Pulumi guide: `infra/pulumi/README.md`
+- Terraform skeleton: `infra/terraform` (TODO: docs)
+
+You’ll need: MongoDB Atlas project ID + API keys, Google Cloud project/region, and your Voyage API key.
 
 ## License
 

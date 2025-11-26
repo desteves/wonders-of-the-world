@@ -81,13 +81,14 @@ class MongoDBCollectionProvider(ResourceProvider):
                 return client
             except errors.OperationFailure as e:
                 # Handle authentication failure
-                if "bad auth" in str(e):
-                    attempt += 1
-                    time.sleep(retry_delay)
-                else:
+                attempt += 1
+                if "bad auth" not in str(e):
                     print(f"MongoDB operation error: {str(e)}")  # Suppress traceback
-            except Exception as e:
-                print(f"MongoDB connection error: {str(e)}")  # Suppress tracebac
+                time.sleep(retry_delay)
+            except errors.PyMongoError as e:
+                attempt += 1
+                print(f"MongoDB connection error: {str(e)}")  # Suppress traceback
+                time.sleep(retry_delay)
         print(f"Failed to authenticate after {max_retries} attempts.")
         return None
         # If authentication fails after max_retries, raise an exception
@@ -151,11 +152,11 @@ class MongoDBCollectionProvider(ResourceProvider):
             if "already exists" in str(err):
                 return CreateResult(id_=f"{db_name}.{collection_name}", outs=props)
             # Raise an error if the collection creation fails
-            raise RuntimeError("Failed to create collection.")
+            raise RuntimeError("Failed to create collection.") from err
 
-        except errors.PyMongoError:
+        except errors.PyMongoError as err:
             # Catch and raise any MongoDB connection errors
-            raise RuntimeError(f"MongoDB connection error.")
+            raise RuntimeError("MongoDB connection error.") from err
         finally:
             # Ensure that the client is closed if it was successfully created
             if client is not None:
