@@ -3,7 +3,7 @@ services:
     image: mongodb/mongodb-community-server:8.2.0-ubi8
     container_name: wonders-mongo
     restart: unless-stopped
-    command: ["mongod", "--config", "/etc/mongod.conf"]
+    command: ["mongod", "--config", "/etc/mongod.conf", "--quiet"]
     ports:
       - "27777:27777"
     volumes:
@@ -70,6 +70,8 @@ services:
     environment:
       MONGODB_URI: mongodb://root:example@mongo:27777/ww?authSource=admin&replicaSet=wonders-rs
       VOYAGE_API_KEY: ${VOYAGE_API_KEY}
+      IS_CLOUD: "0"
+      PORT: 8080
     ports:
       - "8080:8080"
     command: ["python", "-m", "app.app"]

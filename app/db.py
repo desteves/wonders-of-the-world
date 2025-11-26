@@ -2,60 +2,33 @@
 db.py: Handles MongoDB connection, embedding generation, and setup for vector search functionality.
 """
 
-from pathlib import Path
-
 import json
-import logging
 import os
 from datetime import datetime
+from pathlib import Path
 
+import certifi
 from bson.binary import Binary, BinaryVectorDtype
 from dotenv import load_dotenv
 from pymongo import MongoClient
 from pymongo.errors import PyMongoError
 from pymongo.operations import SearchIndexModel
 
-from .embeddings import (
-    get_embedding,
-    get_embedding_dimension,
-    get_embedding_model_info,
-)
+from .embeddings import get_embedding
 
-# Load environment variables from .env file
 load_dotenv()
 
-# MongoDB connection setup
-MONGODB_URI = os.getenv("MONGODB_URI")  # Fetch the MongoDB URI from the .env file
-if not MONGODB_URI:
-    raise ValueError("Missing MONGODB_URI in the .env file")
+MONGODB_URI = os.getenv("MONGODB_URI")
 
-LOGGER = logging.getLogger(__name__)
-
+EMBEDDING_DIMENSION = 1024
+IS_CLOUD = os.getenv("IS_CLOUD") == "1"
 MONGO_CLIENT = MongoClient(MONGODB_URI)
-COLLECTION = MONGO_CLIENT["ww"]["facts"]  # Update database and collection names as needed
+COLLECTION = MONGO_CLIENT["ww"]["facts"]
 VECTOR_INDEX_NAME = "vector-index"
-
-
-
-def _search_not_enabled(exc: Exception) -> bool:
-    """Detect whether a PyMongo error indicates Atlas Search is unavailable."""
-    details = getattr(exc, "details", None)
-    if isinstance(details, dict):
-        code = details.get("code")
-        code_name = details.get("codeName")
-        message = details.get("errmsg") or str(exc)
-    else:
-        code = None
-        code_name = None
-        message = str(exc)
-    if code == 31082 or code_name == "SearchNotEnabled":
-        return True
-    return "SearchNotEnabled" in message or "requires additional configuration" in message
-
 
 def _create_vector_search_index():
     """Create or update the vector search index to match the embedding configuration."""
-    num_dimensions = get_embedding_dimension()
+    num_dimensions = EMBEDDING_DIMENSION
 
     search_index_model = SearchIndexModel(
         definition={
@@ -74,78 +47,9 @@ def _create_vector_search_index():
     )
 
     try:
-        existing_index = next(COLLECTION.list_search_indexes(name=VECTOR_INDEX_NAME), None)
-    except PyMongoError as exc:
-        if _search_not_enabled(exc):
-            LOGGER.warning("Vector search commands unavailable; skipping index setup (%s)", exc)
-            return
-        LOGGER.error("Error checking search index state: %s", exc)
-        existing_index = None
-
-    if existing_index:
-        latest_definition = existing_index.get("latestDefinition") or existing_index.get("definition") or {}
-        fields = latest_definition.get("fields", [])
-        existing_dimensions = next(
-            (field.get("numDimensions") for field in fields if field.get("path") == "embedding"),
-            None,
-        )
-
-        if existing_dimensions == num_dimensions:
-            LOGGER.info("Search index '%s' already matches the expected definition.", VECTOR_INDEX_NAME)
-            return
-
-        LOGGER.info("Updating search index '%s' to match Voyage embedding dimensions...", VECTOR_INDEX_NAME)
-        try:
-            COLLECTION.update_search_index(
-                VECTOR_INDEX_NAME,
-                search_index_model.document["definition"],
-            )
-            LOGGER.info("Search index '%s' updated successfully.", VECTOR_INDEX_NAME)
-        except PyMongoError as exc:
-            if _search_not_enabled(exc):
-                LOGGER.warning("Vector search update unsupported; skipping (%s)", exc)
-                return
-            LOGGER.error("Error updating search index: %s", exc)
-        return
-
-    try:
         COLLECTION.create_search_index(model=search_index_model)
-        LOGGER.info("Search index '%s' created successfully.", VECTOR_INDEX_NAME)
-    except PyMongoError as exc:
-        if _search_not_enabled(exc):
-            LOGGER.warning("Vector search creation unsupported; skipping (%s)", exc)
-            return
-        LOGGER.error("Error creating search index: %s", exc)
-
-
-def ensure_vector_search_ready() -> tuple[bool, str | None]:
-    """
-    Verify the vector index exists and is queryable.
-
-    Returns:
-        tuple[bool, str | None]: (ready, message). Message populated when not ready.
-    """
-    try:
-        index_info = next(COLLECTION.list_search_indexes(name=VECTOR_INDEX_NAME), None)
-    except PyMongoError as exc:
-        if _search_not_enabled(exc):
-            return False, "Vector search commands unavailable on current deployment."
-        LOGGER.error("Error retrieving vector index state: %s", exc)
-        return False, "Error retrieving vector index state."
-
-    if not index_info:
-        return False, f"Vector index '{VECTOR_INDEX_NAME}' is missing."
-
-    status = index_info.get("status") or {}
-    state = status.get("state") or index_info.get("state")
-    if isinstance(state, str) and state.upper() not in {"AVAILABLE", "READY", "QUERYABLE"}:
-        return False, f"Vector index '{VECTOR_INDEX_NAME}' state is '{state}'."
-
-    queryable = status.get("queryable", index_info.get("queryable"))
-    if isinstance(queryable, bool) and not queryable:
-        return False, f"Vector index '{VECTOR_INDEX_NAME}' is not queryable yet."
-
-    return True, None
+    except PyMongoError:
+        pass
 
 
 def _load_sample_data():
@@ -155,21 +59,18 @@ def _load_sample_data():
     Returns:
         int: Count of documents successfully inserted.
     """
-
     data_path = Path(__file__).resolve().parent / "data.json"
-    # Read data from data.json
     try:
         with open(data_path, encoding="utf-8") as file:
             data_entries = json.load(file)
-    except (OSError, json.JSONDecodeError) as exc:
-        LOGGER.error("Error reading data.json: %s", exc)
+    except (OSError, json.JSONDecodeError):
         return 0
 
-    bulk_size = 100
-    buffer = []
     inserted_doc_count = 0
     model_info = {
-        **get_embedding_model_info(),
+        "model_name": "voyage-3-large",
+        "provider": "voyage-ai",
+        "embedding_dimension": EMBEDDING_DIMENSION,
         "created_timestamp": datetime.now().isoformat(),
     }
     for entry in data_entries:
@@ -186,25 +87,12 @@ def _load_sample_data():
             "embedding": Binary.from_vector(embedding.tolist(), BinaryVectorDtype.FLOAT32),
             "model_info": model_info,
         }
-        buffer.append(document)
-
-        if len(buffer) == bulk_size:
-            try:
-                COLLECTION.insert_many(buffer, ordered=False)
-                inserted_doc_count += len(buffer)
-            except PyMongoError as exc:
-                LOGGER.error("Error inserting documents: %s", exc)
-            finally:
-                buffer.clear()
-
-    if buffer:
         try:
-            COLLECTION.insert_many(buffer, ordered=False)
-            inserted_doc_count += len(buffer)
-        except PyMongoError as exc:
-            LOGGER.error("Error inserting remaining documents: %s", exc)
+            COLLECTION.insert_one(document)
+            inserted_doc_count += 1
+        except PyMongoError:
+            pass
 
-    LOGGER.info("Inserted %s documents.", inserted_doc_count)
     return inserted_doc_count
 
 
@@ -218,7 +106,9 @@ def setup_vector_search():
     Returns:
         int: Number of documents successfully inserted into the collection.
     """
-    LOGGER.info("Ensuring vector search index...")
-    _create_vector_search_index()
-    LOGGER.info("Loading sample data...")
-    return _load_sample_data()
+    try:
+        if not IS_CLOUD:
+            _create_vector_search_index()
+        return _load_sample_data()
+    except Exception:
+        return 0

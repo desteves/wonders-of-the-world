@@ -6,18 +6,18 @@ from pathlib import Path
 import pulumi
 import pulumi_gcp as gcp
 import pulumi_mongodbatlas as mongodbatlas
-from pulumi import ResourceOptions, RunError
-from pulumi_docker import DockerBuildArgs, Image, RegistryArgs
+from pulumi import ResourceOptions
+from pulumi_docker import DockerBuildArgs, Image
 
 from config import (
     GCP_PROJECT_ID,
     GCP_REGION,
-    GOOGLE_APPLICATION_CREDENTIALS,
     MONGODB_ATLAS_PROJECT_ID,
     VECTOR_COLLECTION,
     VECTOR_DATABASE,
     VECTOR_PASSWORD,
     VECTOR_USER,
+    VOYAGE_API_KEY,
 )
 from mongodb_collection import MongoDBCollection
 from utils import (
@@ -62,18 +62,6 @@ vector_cluster = mongodbatlas.AdvancedCluster(
 
 vector_uri = vector_cluster.connection_strings.apply(extract_standard_srv)
 
-# Import existing DB user if present to avoid create conflicts
-existing_user_id = None
-try:
-    existing_user = mongodbatlas.get_database_user(
-        project_id=MONGODB_ATLAS_PROJECT_ID,
-        username=VECTOR_USER,
-        auth_database_name="admin",
-    )
-    existing_user_id = existing_user.id
-except RunError:
-    existing_user_id = None
-
 vector_user = mongodbatlas.DatabaseUser(
     "vector-user",
     project_id=MONGODB_ATLAS_PROJECT_ID,
@@ -95,7 +83,6 @@ vector_user = mongodbatlas.DatabaseUser(
     ],
     opts=ResourceOptions(
         depends_on=[vector_cluster],
-        import_=existing_user_id,
     ),
 )
 
@@ -170,6 +157,14 @@ service = gcp.cloudrunv2.Service(
                     gcp.cloudrunv2.ServiceTemplateContainerEnvArgs(
                         name="MONGODB_URI",
                         value=full_mongodb_uri,
+                    ),
+                    gcp.cloudrunv2.ServiceTemplateContainerEnvArgs(
+                        name="IS_CLOUD",
+                        value="1",
+                    ),
+                    gcp.cloudrunv2.ServiceTemplateContainerEnvArgs(
+                        name="VOYAGE_API_KEY",
+                        value=VOYAGE_API_KEY,
                     ),
                 ],
                 ports=[

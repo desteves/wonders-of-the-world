@@ -14,12 +14,12 @@ Search fun facts about the Wonders of the World using semantic similarity. Local
 
 ```sh
 export VOYAGE_API_KEY=your_key
-docker compose up --build
-curl "http://localhost:8080/vectorsearch?prompt=religion"
+docker compose up --build -d
+curl "http://127.0.0.1:8080/vectorsearch?prompt=religion"
 ```
 
 Notes:
-- The app seeds `ww.facts` and builds a vector index at startup; duplicate-key warnings on restarts are harmless.
+- The app seeds `ww.facts` and builds a vector index at startup
 - If curl says “connection reset by peer,” wait for the Flask reloader to finish and retry.
 
 ## Deploy to the cloud (via Infrastructure as Code)

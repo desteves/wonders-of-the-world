@@ -5,6 +5,7 @@ export MONGODB_ATLAS_PROJECT_ID=""
 export MONGODB_ATLAS_PUBLIC_KEY=""
 export MONGODB_ATLAS_PRIVATE_KEY=""
 
+export VOYAGE_API_KEY=your_voyage_api_key_here
 
 # Google Cloud
 # Project ID: https://console.cloud.google.com/projectselector2/home/dashboard

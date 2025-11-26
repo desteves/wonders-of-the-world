@@ -8,6 +8,7 @@ COPY requirements.txt ./app/requirements.txt
 COPY data.json ./app/data.json
 RUN pip install --no-cache-dir -r app/requirements.txt
 
+ENV PORT=8080
 COPY . ./app
 
 CMD ["python", "-m", "app.app"]
