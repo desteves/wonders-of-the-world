@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pulumi
 import pulumi_gcp as gcp
+import pulumi_command as command
 import pulumi_mongodbatlas as mongodbatlas
 from pulumi import ResourceOptions
 from pulumi_docker import DockerBuildArgs, Image
@@ -88,7 +89,7 @@ vector_user = mongodbatlas.DatabaseUser(
 
 workstation_ip = get_public_ip()
 
-access_access_workstation_ip = mongodbatlas.ProjectIpAccessList(
+access_workstation_ip = mongodbatlas.ProjectIpAccessList(
         "workstation-ip-access",
         project_id=MONGODB_ATLAS_PROJECT_ID,
         ip_address=workstation_ip,
@@ -104,20 +105,7 @@ vector_collection = MongoDBCollection(
         "db": VECTOR_DATABASE,
         "coll": VECTOR_COLLECTION,
     },
-    opts=ResourceOptions(depends_on=[vector_user, access_access_workstation_ip]),
-)
-
-vector_search_index = mongodbatlas.SearchIndex(
-    "vector-index",
-    project_id=MONGODB_ATLAS_PROJECT_ID,
-    name=vector_index_name,
-    cluster_name=vector_cluster.name,
-    database=VECTOR_DATABASE,
-    collection_name=VECTOR_COLLECTION,
-    type="vectorSearch",
-    fields=json.dumps(vector_search_index_fields),
-    wait_for_index_build_completion=True,
-    opts=ResourceOptions(depends_on=[vector_collection]),
+    opts=ResourceOptions(depends_on=[vector_user, access_workstation_ip]),
 )
 
 full_mongodb_uri = pulumi.Output.all(
@@ -132,6 +120,32 @@ full_mongodb_uri = pulumi.Output.all(
         "?retryWrites=true&w=majority"
     )
 )
+
+vector_data = command.local.Command(
+    "vector-data",
+    create=f"python {APP_DIR}/db.py",
+    environment={
+        "MONGODB_URI": full_mongodb_uri,
+        "VOYAGE_API_KEY": VOYAGE_API_KEY,
+    },
+    opts=ResourceOptions(depends_on=[vector_collection]),
+)
+
+
+
+vector_search_index = mongodbatlas.SearchIndex(
+    "vector-index",
+    project_id=MONGODB_ATLAS_PROJECT_ID,
+    name=vector_index_name,
+    cluster_name=vector_cluster.name,
+    database=VECTOR_DATABASE,
+    collection_name=VECTOR_COLLECTION,
+    type="vectorSearch",
+    fields=json.dumps(vector_search_index_fields),
+    wait_for_index_build_completion=True,
+    opts=ResourceOptions(depends_on=[vector_collection]),
+)
+
 pulumi.export("MONGODB_URI", pulumi.Output.secret(full_mongodb_uri))
 
 image = Image(

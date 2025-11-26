@@ -60,6 +60,8 @@ def _load_sample_data():
         int: Count of documents successfully inserted.
     """
     data_path = Path(__file__).resolve().parent / "data.json"
+    print(f"Loading sample data from {data_path}")
+
     try:
         with open(data_path, encoding="utf-8") as file:
             data_entries = json.load(file)
@@ -73,6 +75,8 @@ def _load_sample_data():
         "embedding_dimension": EMBEDDING_DIMENSION,
         "created_timestamp": datetime.now().isoformat(),
     }
+    print(f"Using model info: {model_info}")
+
     for entry in data_entries:
         if "text" not in entry:
             continue
@@ -93,6 +97,7 @@ def _load_sample_data():
         except PyMongoError:
             pass
 
+    print(f"Inserted {inserted_doc_count} documents into the collection.")
     return inserted_doc_count
 
 
@@ -107,8 +112,11 @@ def setup_vector_search():
         int: Number of documents successfully inserted into the collection.
     """
     try:
-        if not IS_CLOUD:
-            _create_vector_search_index()
+        _create_vector_search_index()
         return _load_sample_data()
     except Exception:
         return 0
+
+
+if __name__ == "__main__":
+    print(_load_sample_data())

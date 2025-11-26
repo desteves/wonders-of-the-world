@@ -4,7 +4,7 @@ import os
 
 from flask import Flask, jsonify, request
 
-from .db import COLLECTION, VECTOR_INDEX_NAME, setup_vector_search
+from .db import COLLECTION, VECTOR_INDEX_NAME, IS_CLOUD, setup_vector_search
 from .embeddings import get_embedding
 
 app = Flask(__name__)
@@ -46,6 +46,7 @@ def vector_search():
 
 
 if __name__ == "__main__":
-    setup_vector_search()
+    if not IS_CLOUD:
+        setup_vector_search()
     port = int(os.getenv("PORT", "8080"))
     app.run(host="0.0.0.0", port=port)
